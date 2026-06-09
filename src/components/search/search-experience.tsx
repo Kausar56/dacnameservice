@@ -8,12 +8,10 @@ import { Clock, Search, Sparkles, TrendingUp, X } from "lucide-react";
 import { AuroraBackground } from "@/components/effects";
 import { Container } from "@/components/ui/container";
 
+import { domainService } from "@/lib/domain";
+
 import { CategoryExplorer } from "./category-explorer";
-import {
-  searchDomains,
-  TRENDING,
-  type DomainResult,
-} from "./mock-data";
+import { TRENDING, type DomainResult } from "./mock-data";
 import { ResultCard } from "./result-card";
 import { SearchFilters, type FilterValue } from "./search-filters";
 import { SearchInput } from "./search-input";
@@ -53,8 +51,11 @@ export function SearchExperience() {
     }
 
     setPhase("loading");
-    timerRef.current = setTimeout(() => {
-      const found = searchDomains(trimmed);
+    let active = true;
+    timerRef.current = setTimeout(async () => {
+      // Search Domain → DomainService → DomainRepository (DB query) → Result
+      const found = await domainService.search(trimmed);
+      if (!active) return;
       if (found.length === 0) {
         setResults([]);
         setPhase("empty");
@@ -67,6 +68,7 @@ export function SearchExperience() {
     }, RESOLVE_MS);
 
     return () => {
+      active = false;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [query, add]);

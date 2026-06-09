@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
 import { DomainDetails, DomainNotFound } from "@/components/domain";
-import { getDomainDetails } from "@/components/search/mock-data";
+import { domainService } from "@/lib/domain";
 
 interface PageProps {
   params: { name: string };
 }
 
-export function generateMetadata({ params }: PageProps): Metadata {
-  const details = getDomainDetails(decodeURIComponent(params.name));
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const details = await domainService.getDetails(decodeURIComponent(params.name));
   if (!details) {
     return {
       title: "Domain not found — DACNS",
@@ -21,8 +21,8 @@ export function generateMetadata({ params }: PageProps): Metadata {
   };
 }
 
-export default function DomainPage({ params }: PageProps) {
-  const details = getDomainDetails(decodeURIComponent(params.name));
+export default async function DomainPage({ params }: PageProps) {
+  const details = await domainService.getDetails(decodeURIComponent(params.name));
 
   return (
     <main className="relative min-h-screen bg-dac-bg">

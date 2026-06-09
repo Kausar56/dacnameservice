@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 
 import { RegisterFlow, RegisterUnavailable } from "@/components/register";
-import { resolveDomain } from "@/components/search/mock-data";
+import { domainService } from "@/lib/domain";
 
 interface PageProps {
   params: { name: string };
 }
 
-export function generateMetadata({ params }: PageProps): Metadata {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const name = decodeURIComponent(params.name);
-  const result = resolveDomain(name);
+  const result = await domainService.resolve(name);
   return {
     title: result
       ? `Register ${result.name} — DACNS`
@@ -19,9 +19,9 @@ export function generateMetadata({ params }: PageProps): Metadata {
   };
 }
 
-export default function RegisterPage({ params }: PageProps) {
+export default async function RegisterPage({ params }: PageProps) {
   const name = decodeURIComponent(params.name);
-  const result = resolveDomain(name);
+  const result = await domainService.resolve(name);
   const canRegister =
     result && (result.status === "available" || result.status === "premium");
 
