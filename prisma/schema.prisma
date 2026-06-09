@@ -1,0 +1,453 @@
+// ============================================================================
+// DACNS — DAC Name Service
+// Database architecture (PostgreSQL + Prisma ORM)
+// ----------------------------------------------------------------------------
+// Domain layer only. No API/business logic lives here.
+//
+// Design principles
+//  - Wallet address is the canonical identity (SIWE-style auth, no passwords).
+//  - All on-chain references are idempotent via unique txHash.
+//  - History is append-only (Registration / Renewal / ActivityLog).
+//  - Premium / Reserved catalogs are decoupled from live ownership (Domain).
+//  - Soft-delete on identity-bearing rows so history never breaks.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Pooled connection (e.g. PgBouncer) used by the app at runtime.
+  url = env("DATABASE_URL")
+  // Direct connection used by `prisma migrate` / introspection only.
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum DomainStatus {
+  PENDING // registration tx not yet confirmed
+  ACTIVE // owned and within validity period
+  GRACE_PERIOD // expired but still reclaimable by owner
+  EXPIRED // past grace period, returns to the pool
+  RESERVED // held by the DAC ecosystem, not openly registrable
+}
+
+enum DomainCategory {
+  STANDARD
+  PREMIUM
+  RESERVED
+  TWO_CHARACTER
+  THREE_CHARACTER
+  FOUR_CHARACTER
+  FIVE_CHARACTER
+}
+
+enum TxStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum QETier {
+  NEWCOMER
+  BUILDER
+  PIONEER
+  LEGEND
+}
+
+enum ActivityType {
+  DOMAIN_REGISTERED
+  DOMAIN_RENEWED
+  DOMAIN_TRANSFERRED
+  DOMAIN_EXPIRED
+  RESOLVER_UPDATED
+  PROFILE_UPDATED
+  PRIMARY_NAME_SET
+  QE_EARNED
+  USER_LOGIN
+  ADMIN_ACTION
+}
+
+// ============================================================================
+// USER  — canonical identity (one wallet = one user)
+// ============================================================================
+
+model User {
+  id            String     @id @default(cuid())
+  // Stored lowercased (0x...). Unique => one account per wallet.
+  walletAddress String     @unique
+  email         String?    @unique // optional, for notifications (PII)
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
+
+  // SIWE nonce rotated on every successful sign-in to prevent replay.
+  nonce       String?
+  lastLoginAt DateTime?
+
+  // Reverse record: the user's primary .dac name.
+  primaryDomainId String? @unique
+  primaryDomain   Domain? @relation("PrimaryDomain", fields: [primaryDomainId], references: [id], onDelete: SetNull)
+
+  // Relations
+  domains       Domain[]       @relation("OwnedDomains")
+  profile       Profile?
+  qePoints      QEPoints?
+  registrations Registration[]
+  renewals      Renewal[]
+  activityLogs  ActivityLog[]
+
+  // Admin / whitelist relations
+  whitelistEntry     Whitelist?       @relation("UserWhitelist")
+  whitelistAdditions Whitelist[]      @relation("WhitelistAddedBy")
+  reservedDomains    ReservedDomain[] @relation("ReservedBy")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  @@index([status])
+  @@index([role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+// ============================================================================
+// DOMAIN  — a registered / lifecycle-tracked .dac name
+// ============================================================================
+
+model Domain {
+  id String @id @default(cuid())
+
+  // "satoshi" — the label only, lowercased.
+  label String
+  tld   String @default("dac")
+  // "satoshi.dac" — full name, the public unique key.
+  name  String @unique
+  // Case/whitespace-normalized form used for lookups & dedupe.
+  normalizedName String @unique
+
+  length   Int
+  category DomainCategory @default(STANDARD)
+  status   DomainStatus   @default(PENDING)
+
+  isPremium  Boolean @default(false)
+  isReserved Boolean @default(false)
+
+  // Optional on-chain token id if names are tokenized (NFT).
+  tokenId String? @unique
+
+  // Ownership (nullable: a row can exist in EXPIRED state with no owner).
+  ownerId String?
+  owner   User?   @relation("OwnedDomains", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  // Lifecycle
+  registeredAt      DateTime?
+  expiresAt         DateTime?
+  gracePeriodEndsAt DateTime?
+
+  // Relations
+  resolver      Resolver?
+  registrations Registration[]
+  renewals      Renewal[]
+  activityLogs  ActivityLog[]
+  primaryForUser User?         @relation("PrimaryDomain")
+  premiumListing PremiumDomain? @relation("PremiumClaim")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([label, tld]) // a label is unique within a TLD
+  @@index([ownerId]) // "my domains"
+  @@index([status])
+  @@index([expiresAt]) // expiry sweeps / "expiring soon"
+  @@index([category])
+  @@index([ownerId, status])
+  @@map("domains")
+}
+
+// ============================================================================
+// REGISTRATION  — append-only record of each registration event
+// ============================================================================
+
+model Registration {
+  id String @id @default(cuid())
+
+  domainId String
+  domain   Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  durationYears Int
+  registeredAt  DateTime @default(now())
+  expiresAt     DateTime // expiry produced by this registration
+
+  // Money — store as high-precision decimal (DACC has 18 decimals).
+  pricePaid  Decimal @db.Decimal(38, 18)
+  networkFee Decimal @default(0) @db.Decimal(38, 18)
+  gasUsed    BigInt?
+  currency   String  @default("DACC")
+
+  // On-chain idempotency: prevents processing the same tx twice.
+  txHash String?  @unique
+  status TxStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  @@index([domainId])
+  @@index([userId])
+  @@index([status])
+  @@index([registeredAt])
+  @@map("registrations")
+}
+
+// ============================================================================
+// RENEWAL  — append-only renewal history per domain
+// ============================================================================
+
+model Renewal {
+  id String @id @default(cuid())
+
+  domainId String
+  domain   Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  durationYears  Int
+  previousExpiry DateTime
+  newExpiry      DateTime
+
+  pricePaid  Decimal @db.Decimal(38, 18)
+  networkFee Decimal @default(0) @db.Decimal(38, 18)
+  gasUsed    BigInt?
+  currency   String  @default("DACC")
+
+  txHash    String?  @unique
+  status    TxStatus @default(PENDING)
+  renewedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([domainId])
+  @@index([userId])
+  @@index([status])
+  @@index([renewedAt])
+  @@map("renewals")
+}
+
+// ============================================================================
+// RESOLVER  — 1:1 with Domain. Holds resolution records.
+// ============================================================================
+
+model Resolver {
+  id String @id @default(cuid())
+
+  domainId String @unique
+  domain   Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  // Address the name resolves to (defaults to owner wallet), lowercased.
+  resolvedAddress String?
+  contentHash     String? // IPFS / content addressing
+
+  // Reverse resolution toggle + verification state.
+  reverseRecord Boolean   @default(false)
+  verified      Boolean   @default(false)
+  verifiedAt    DateTime?
+
+  // Arbitrary text / coin records: { "avatar": "...", "url": "...",
+  // "com.twitter": "...", "email": "...", "addr.eth": "0x..." }
+  textRecords Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resolvedAddress])
+  @@map("resolvers")
+}
+
+// ============================================================================
+// PROFILE  — 1:1 with User. Public decentralized profile.
+// ============================================================================
+
+model Profile {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName String?
+  bio         String? @db.Text
+  avatarUrl   String?
+  bannerUrl   String?
+  location    String?
+
+  // Social links
+  website  String?
+  twitter  String?
+  github   String?
+  discord  String?
+  telegram String?
+
+  isPublic Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+// ============================================================================
+// QE POINTS  — 1:1 aggregate balance per user (ledger lives in ActivityLog)
+// ============================================================================
+
+model QEPoints {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  total         Int      @default(0)
+  activityScore Int      @default(0) // 0-100
+  streakDays    Int      @default(0)
+  tier          QETier   @default(NEWCOMER)
+  rank          Int? // cached global rank
+  nextTierAt    Int      @default(1000)
+  lastEarnedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([total]) // leaderboard ordering
+  @@index([tier])
+  @@map("qe_points")
+}
+
+// ============================================================================
+// ACTIVITY LOG  — append-only audit trail + QE ledger
+// ============================================================================
+
+model ActivityLog {
+  id String @id @default(cuid())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  domainId String?
+  domain   Domain? @relation(fields: [domainId], references: [id], onDelete: SetNull)
+
+  type        ActivityType
+  description String?
+  metadata    Json?
+  qeDelta     Int? // points granted by this event (ledger entry)
+
+  // Security/audit context (no PII beyond what's required).
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([domainId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}
+
+// ============================================================================
+// WHITELIST  — admin-controlled allowlist (early access / claim rights)
+// ============================================================================
+
+model Whitelist {
+  id String @id @default(cuid())
+
+  walletAddress String  @unique // lowercased
+  userId        String? @unique
+  user          User?   @relation("UserWhitelist", fields: [userId], references: [id], onDelete: SetNull)
+
+  reason     String?
+  allocation Int? // e.g. number of names allowed
+  active     Boolean   @default(true)
+  expiresAt  DateTime?
+
+  // Audit: which admin added the entry.
+  addedById String?
+  addedBy   User?   @relation("WhitelistAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@map("whitelist")
+}
+
+// ============================================================================
+// PREMIUM DOMAIN  — catalog of premium names + premium pricing
+// ============================================================================
+
+model PremiumDomain {
+  id String @id @default(cuid())
+
+  label String @unique // "alpha"
+  name  String @unique // "alpha.dac"
+
+  price    Decimal        @db.Decimal(38, 18)
+  currency String         @default("DACC")
+  category DomainCategory @default(PREMIUM)
+  tier     String? // marketing tier label, e.g. "Tier 1"
+  reason   String?
+
+  // Linked once the name is actually registered.
+  isClaimed       Boolean @default(false)
+  claimedDomainId String? @unique
+  claimedDomain   Domain? @relation("PremiumClaim", fields: [claimedDomainId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isClaimed])
+  @@index([category])
+  @@map("premium_domains")
+}
+
+// ============================================================================
+// RESERVED DOMAIN  — names withheld from open registration
+// ============================================================================
+
+model ReservedDomain {
+  id String @id @default(cuid())
+
+  label String @unique // "admin"
+  name  String @unique // "admin.dac"
+
+  reason     String?
+  releasable Boolean   @default(false)
+  releaseAt  DateTime? // optional scheduled release
+
+  // Audit: which admin reserved it.
+  reservedById String?
+  reservedBy   User?   @relation("ReservedBy", fields: [reservedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([releasable])
+  @@map("reserved_domains")
+}

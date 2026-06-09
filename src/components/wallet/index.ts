@@ -7,5 +7,4 @@ export {
   dacTestnet,
   truncateAddress,
   explorerAddressUrl,
-  WC_PROJECT_ID,
 } from "./wagmi-config";

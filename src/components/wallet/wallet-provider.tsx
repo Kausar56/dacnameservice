@@ -1,29 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { WagmiProvider } from "wagmi";
+import { createConfig, http, WagmiProvider } from "wagmi";
+import { injected } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RainbowKitProvider, darkTheme, getDefaultConfig } from "@rainbow-me/rainbowkit";
-import {
-  metaMaskWallet,
-  rabbyWallet,
-  walletConnectWallet,
-} from "@rainbow-me/rainbowkit/wallets";
+import { darkTheme, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 
 import "@rainbow-me/rainbowkit/styles.css";
 
-import { dacTestnet, WC_PROJECT_ID } from "./wagmi-config";
+import { dacTestnet } from "./wagmi-config";
 
-const wagmiConfig = getDefaultConfig({
-  appName: "DACNS — DAC Name Service",
-  projectId: WC_PROJECT_ID,
+/**
+ * WalletConnect is intentionally disabled.
+ *
+ * We use wagmi's native `injected()` connector instead of RainbowKit's wallet
+ * modules (`metaMaskWallet` / `rabbyWallet`), because those require a
+ * WalletConnect Cloud `projectId` and throw "No projectId found" when it is
+ * missing. The injected connector needs no projectId and, with EIP-6963
+ * multi-provider discovery (enabled by default), surfaces MetaMask and Rabby
+ * as separate options in the RainbowKit modal.
+ */
+const wagmiConfig = createConfig({
   chains: [dacTestnet],
-  wallets: [
-    {
-      groupName: "Recommended",
-      wallets: [rabbyWallet, metaMaskWallet, walletConnectWallet],
-    },
-  ],
+  connectors: [injected({ shimDisconnect: true })],
+  transports: { [dacTestnet.id]: http() },
   ssr: true,
 });
 
