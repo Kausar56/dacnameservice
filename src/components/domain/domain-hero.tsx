@@ -59,7 +59,7 @@ export function DomainHero({ details }: { details: DomainDetails }) {
           </div>
 
           {/* Actions */}
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3">
             <CopyButton
               value={typeof window !== "undefined" ? window.location.href : details.name}
               label="Share domain"

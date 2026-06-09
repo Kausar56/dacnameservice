@@ -73,7 +73,8 @@ export function ConnectButton({ className, fullWidth }: ConnectButtonProps) {
         ) : (
           <>
             <Wallet className="size-3.5" />
-            Connect Wallet
+            <span className="sm:hidden">Connect</span>
+            <span className="hidden sm:inline">Connect Wallet</span>
           </>
         )}
       </Button>
