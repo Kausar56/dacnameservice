@@ -1,0 +1,9 @@
+export { TrustBar } from "./trust-bar";
+export { WhyDacnsSection } from "./why-dacns-section";
+export { HowItWorksSection } from "./how-it-works-section";
+export { IdentityFeaturesSection } from "./identity-features-section";
+export { EcosystemSection } from "./ecosystem-section";
+export { DomainCategoriesSection } from "./domain-categories-section";
+export { QERewardsSection } from "./qe-rewards-section";
+export { FAQSection } from "./faq-section";
+export { Footer } from "./footer";
