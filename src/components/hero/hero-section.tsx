@@ -1,15 +1,31 @@
 "use client";
 
+import Link from "next/link";
 import { motion, type Variants } from "framer-motion";
-import { ArrowRight, Sparkles, Wallet } from "lucide-react";
+import {
+  ArrowUpRight,
+  Gift,
+  KeyRound,
+  Network,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 
 import { AuroraBackground, Spotlight } from "@/components/effects";
-import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { DomainSearch } from "./domain-search";
 import { IdentityVisual } from "./identity-visual";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+
+const POPULAR = ["gm.dac", "builder.dac", "alpha.dac", "satoshi.dac"];
+
+const TRUST = [
+  { icon: KeyRound, label: "Real Wallet Ownership" },
+  { icon: Network, label: "DAC Testnet Ready" },
+  { icon: Gift, label: "QE Rewards Enabled" },
+  { icon: ShieldCheck, label: "Secure Registration" },
+];
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 20 },
@@ -69,7 +85,7 @@ export function HeroSection() {
                 your decentralized profile, and become part of the DAC ecosystem.
               </motion.p>
 
-              {/* Search */}
+              {/* Search — the single primary action */}
               <motion.div
                 custom={3}
                 variants={fadeUp}
@@ -80,22 +96,44 @@ export function HeroSection() {
                 <DomainSearch />
               </motion.div>
 
-              {/* CTAs */}
+              {/* Popular domains */}
               <motion.div
                 custom={4}
                 variants={fadeUp}
                 initial="hidden"
                 animate="visible"
-                className="mt-8 flex flex-col items-center gap-3 sm:flex-row lg:justify-start"
+                className="mt-7 flex flex-wrap items-center justify-center gap-2 lg:justify-start"
               >
-                <Button variant="gradient" size="lg" className="w-full rounded-xl sm:w-auto">
-                  Register Domain
-                  <ArrowRight className="size-4" />
-                </Button>
-                <Button variant="glass" size="lg" className="w-full rounded-xl sm:w-auto">
-                  <Wallet className="size-4" />
-                  Connect Wallet
-                </Button>
+                <span className="text-caption mr-1">Popular</span>
+                {POPULAR.map((name) => (
+                  <Link
+                    key={name}
+                    href={`/domain/${name}`}
+                    className="group inline-flex items-center gap-1.5 rounded-full glass-subtle px-3 py-1.5 font-mono text-sm text-foreground/80 transition-colors hover:bg-white/[0.06] hover:text-foreground"
+                  >
+                    {name}
+                    <ArrowUpRight className="size-3.5 text-muted-foreground transition-colors group-hover:text-dac-cyan" />
+                  </Link>
+                ))}
+              </motion.div>
+
+              {/* Trust indicators */}
+              <motion.div
+                custom={5}
+                variants={fadeUp}
+                initial="hidden"
+                animate="visible"
+                className="mt-10 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5 lg:justify-start"
+              >
+                {TRUST.map(({ icon: Icon, label }) => (
+                  <span
+                    key={label}
+                    className="text-caption inline-flex items-center gap-1.5 text-muted-foreground"
+                  >
+                    <Icon className="size-4 shrink-0 text-dac-cyan" />
+                    {label}
+                  </span>
+                ))}
               </motion.div>
             </div>
 
