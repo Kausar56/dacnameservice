@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowUpRight, Crown, Lock, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +18,6 @@ interface ResultCardProps {
 
 /** Uniform grid card: status, category, length, price/owner + action. */
 export function ResultCard({ result, highlight }: ResultCardProps) {
-  const router = useRouter();
   const meta = STATUS_META[result.status];
   const Icon = meta.icon;
   const category = categoryOf(result);
@@ -27,22 +25,20 @@ export function ResultCard({ result, highlight }: ResultCardProps) {
 
   return (
     <div
-      role="link"
-      tabIndex={0}
-      aria-label={`View details for ${result.name}`}
-      onClick={() => router.push(href)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          router.push(href);
-        }
-      }}
       className={cn(
-        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl glass p-5 transition-all hover:-translate-y-0.5 hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dac-cyan/50",
+        "group relative flex h-full flex-col overflow-hidden rounded-2xl glass p-5 transition-all hover:-translate-y-0.5 hover:shadow-elevated",
         meta.ring,
         highlight && "border-dac-cyan/40 shadow-glow"
       )}
     >
+      {/* Whole-card link (prefetched). Stretched overlay keeps nested action
+          buttons valid + clickable instead of nesting links inside an anchor. */}
+      <Link
+        href={href}
+        aria-label={`View details for ${result.name}`}
+        className="absolute inset-0 z-20 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dac-cyan/50"
+      />
+
       {/* accent glow */}
       <div
         className={cn(
@@ -113,10 +109,7 @@ export function ResultCard({ result, highlight }: ResultCardProps) {
       </p>
 
       {/* Action */}
-      <div
-        className="relative mt-5 flex items-center gap-2 pt-1"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative z-30 mt-5 flex items-center gap-2 pt-1">
         {result.status === "available" && (
           <Button asChild variant="gradient" className="flex-1 rounded-xl">
             <Link href={`/register/${result.name}`}>

@@ -1,10 +1,10 @@
 /**
  * Real wagmi + viem + RainbowKit configuration for DACNS.
  *
- * Defines the DAC Inception Testnet chain and exposes RSC-safe helpers.
- * Connectors are assembled in `wallet-provider.tsx` using wagmi's injected
- * connector (MetaMask + Rabby). WalletConnect is disabled, so no
- * WalletConnect Cloud projectId is required anywhere.
+ * Defines the DAC Inception Testnet chain and exposes RSC-safe helpers + the
+ * WalletConnect project id. Connectors are assembled in `wallet-provider.tsx`:
+ * Rabby + MetaMask + WalletConnect when a project id is present, otherwise a
+ * safe injected-only fallback (no crash).
  */
 
 import { defineChain } from "viem";
@@ -22,6 +22,16 @@ export const dacTestnet = defineChain({
   },
   testnet: true,
 });
+
+/**
+ * WalletConnect Cloud project id, read from the public env var.
+ * Empty when unset — the wallet provider falls back to injected-only.
+ */
+export const WALLETCONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim() ?? "";
+
+/** Whether the WalletConnect connector should be initialized. */
+export const hasWalletConnect = WALLETCONNECT_PROJECT_ID.length > 0;
 
 /** Shorten an address like 0x9F2c…A41d. */
 export function truncateAddress(address: string, chars = 4): string {

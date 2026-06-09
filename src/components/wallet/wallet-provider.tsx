@@ -11,14 +11,17 @@ import "@rainbow-me/rainbowkit/styles.css";
 import { dacTestnet } from "./wagmi-config";
 
 /**
- * WalletConnect is intentionally disabled.
+ * WalletConnect is temporarily disabled.
  *
- * We use wagmi's native `injected()` connector instead of RainbowKit's wallet
- * modules (`metaMaskWallet` / `rabbyWallet`), because those require a
- * WalletConnect Cloud `projectId` and throw "No projectId found" when it is
- * missing. The injected connector needs no projectId and, with EIP-6963
- * multi-provider discovery (enabled by default), surfaces MetaMask and Rabby
- * as separate options in the RainbowKit modal.
+ * The WalletConnect connector pulls in a QR modal whose generator
+ * (`@paulmillr/qr`, via the MetaMask SDK path) throws "invalid border=0" and
+ * crashes the modal. Until that QR implementation is fixed we ship only the
+ * injected connector, which surfaces Rabby and MetaMask via EIP-6963 (the
+ * browser-extension popups). No WalletConnect, no QR, no projectId required —
+ * so there is no crash path.
+ *
+ * To re-enable WalletConnect later: add `connectorsForWallets` with
+ * `walletConnectWallet` + a valid projectId back into `connectors`.
  */
 const wagmiConfig = createConfig({
   chains: [dacTestnet],
