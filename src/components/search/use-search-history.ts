@@ -19,8 +19,7 @@ export function useSearchHistory() {
     }
   }, []);
 
-  const persist = React.useCallback((next: string[]) => {
-    setHistory(next);
+  const writeStorage = React.useCallback((next: string[]) => {
     try {
       localStorage.setItem(KEY, JSON.stringify(next));
     } catch {
@@ -32,19 +31,30 @@ export function useSearchHistory() {
     (term: string) => {
       const t = term.trim().toLowerCase();
       if (!t) return;
-      persist([t, ...history.filter((h) => h !== t)].slice(0, MAX));
+      setHistory((prev) => {
+        const next = [t, ...prev.filter((h) => h !== t)].slice(0, MAX);
+        writeStorage(next);
+        return next;
+      });
     },
-    [history, persist]
+    [writeStorage]
   );
 
   const remove = React.useCallback(
     (term: string) => {
-      persist(history.filter((h) => h !== term));
+      setHistory((prev) => {
+        const next = prev.filter((h) => h !== term);
+        writeStorage(next);
+        return next;
+      });
     },
-    [history, persist]
+    [writeStorage]
   );
 
-  const clear = React.useCallback(() => persist([]), [persist]);
+  const clear = React.useCallback(() => {
+    setHistory([]);
+    writeStorage([]);
+  }, [writeStorage]);
 
   return { history, add, remove, clear };
 }

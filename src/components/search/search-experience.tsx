@@ -69,9 +69,7 @@ export function SearchExperience() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-    // `add` is stable enough; intentionally only react to query changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, add]);
 
   const handleSelect = (label: string) => {
     setQuery(label);
